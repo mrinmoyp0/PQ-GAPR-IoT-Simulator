@@ -160,8 +160,8 @@ with st.sidebar:
     reporting_interval_s = st.select_slider(
         "Transmission Reporting Interval (Duty Cycle)",
         options=[60, 120, 300, 600, 1800, 3600, 86400],
-        value=300,
-        format_func=lambda x: f"Every {x}s ({x/60:.0f}m)" if x < 3600 else (f"Every {x/3600:.0f}h" if x < 86400 else "Every 24h")
+        value=3600,
+        format_func=lambda x: f"Every {x}s ({x/60:.0f}m)" if x < 3600 else (f"Every {x/3600:.0f}h" if x < 86400 else "Every 24h (Daily Deployment)")
     )
     
     # Airtime & Duty Cycle Legality Notice (Per-Algorithm Evaluation)
@@ -375,10 +375,14 @@ sim = calculate_simulation(payload_size, num_sessions, epoch_interval, reporting
 prop_data = sim["Proposed: PQ-GAPR"]
 mlkem_data = sim["Direct PQC: ML-KEM-512 (FIPS 203)"]
 
+# Calculate 24h Deployment Lifetime for headline metrics
+sim_daily = calculate_simulation(payload_size, 100, epoch_interval, 86400)
+prop_daily = sim_daily["Proposed: PQ-GAPR"]["battery_years"]
+mlkem_daily = sim_daily["Direct PQC: ML-KEM-512 (FIPS 203)"]["battery_years"]
+
 energy_diff_pct = (1.0 - (prop_data["total_energy_mj"] / mlkem_data["total_energy_mj"])) * 100.0
 ram_diff_pct = (1.0 - (prop_data["stack_ram_bytes"] / mlkem_data["stack_ram_bytes"])) * 100.0
 data_diff_pct = (1.0 - (prop_data["total_tx_bytes"] / mlkem_data["total_tx_bytes"])) * 100.0
-battery_multiplier = prop_data["battery_years"] / max(0.001, mlkem_data["battery_years"])
 
 # ==============================================================================
 # 5. TOP KPI SCORECARD
@@ -387,7 +391,7 @@ kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 kpi1.metric("Energy Savings vs. ML-KEM", f"{energy_diff_pct:.1f}%", f"{prop_data['total_energy_mj']:,.1f} mJ vs {mlkem_data['total_energy_mj']:,.1f} mJ")
 kpi2.metric("Peak RAM Reduction", f"{ram_diff_pct:.1f}%", f"{prop_data['stack_ram_bytes']} B vs {mlkem_data['stack_ram_bytes']} B")
 kpi3.metric("Over-the-Air Data Reduction", f"{data_diff_pct:.1f}%", f"{prop_data['total_tx_bytes']:,} B vs {mlkem_data['total_tx_bytes']:,} B")
-kpi4.metric("Battery Longevity Multiplier", f"{battery_multiplier:.1f}×", f"{prop_data['battery_years']:.2f} Yrs vs {mlkem_data['battery_years']:.2f} Yrs")
+kpi4.metric("Daily Deployment Lifetime", f"{prop_daily:.2f} Years", f"+{(prop_daily - mlkem_daily)*365.25:.0f} days vs ML-KEM ({prop_daily:.2f}y vs {mlkem_daily:.2f}y)")
 
 st.markdown("---")
 
@@ -526,20 +530,28 @@ st.markdown("---")
 # ==============================================================================
 st.subheader("📋 Complete Protocol Benchmark Table")
 
+# Precompute deployment cadences for table
+sim_hourly = calculate_simulation(payload_size, 100, epoch_interval, 3600)
+sim_daily_tbl = calculate_simulation(payload_size, 100, epoch_interval, 86400)
+
 table_rows = []
 for k, v in sim.items():
     is_prop = "PQ-GAPR" in k
+    life_daily = sim_daily_tbl[k]["battery_years"]
+    life_hourly = sim_hourly[k]["battery_years"]
+    
     table_rows.append({
         "Algorithm": f"⭐ {k}" if is_prop else k,
         "Post-Quantum Security": v["pq_sec"],
         "Forward Secrecy": v["fs"],
-        "Post-Compromise Security (PCS)": v["pcs"],
+        "PCS": v["pcs"],
         "Stack RAM": f"{v['stack_ram_bytes']:,} B",
         "Flash ROM": f"{v['flash_bytes'] / 1024:.1f} KB",
-        "Handshake Frames (TX↑/RX↓)": f"{v['hs_total_packets']} ({v['hs_tx_packets']}↑ / {v['hs_rx_packets']}↓)" if v['hs_total_packets'] > 0 else "0",
-        "Handshake Energy": f"{v['handshake_energy_mj']:,.1f} mJ" if v['handshake_energy_mj'] > 0 else "0 mJ",
+        "HS Frames (TX↑/RX↓)": f"{v['hs_total_packets']} ({v['hs_tx_packets']}↑ / {v['hs_rx_packets']}↓)" if v['hs_total_packets'] > 0 else "0",
+        "HS Energy": f"{v['handshake_energy_mj']:,.1f} mJ" if v['handshake_energy_mj'] > 0 else "0 mJ",
         "Total Energy (mJ)": f"{v['total_energy_mj']:,.1f} mJ",
-        "Battery Lifetime": f"{v['battery_years']:.2f} Years"
+        "Battery (24h Daily)": f"{life_daily:.2f} Years ({life_daily*365.25:.0f} d)",
+        "Battery (1h Metering)": f"{life_hourly*365.25:.0f} Days"
     })
 
 df_table = pd.DataFrame(table_rows)
@@ -628,16 +640,17 @@ with col_d1:
 with col_d2:
     latex_table = """\\begin{table}[t]
 \\centering
-\\caption{Performance Evaluation on ARM Cortex-M4 over LoRaWAN DR0}
+\\caption{Performance Evaluation on ARM Cortex-M4 over LoRaWAN DR0 (SF12 / 51B MTU)}
 \\label{tab:pqc_cortex_m4}
-\\begin{tabular}{lccccc}
+\\begin{tabular}{lcccccc}
 \\hline
-\\textbf{Algorithm} & \\textbf{RAM (B)} & \\textbf{Flash (KB)} & \\textbf{HS Frames (TX/RX)} & \\textbf{HS Energy (mJ)} & \\textbf{Total Energy (mJ)} \\\\
+\\textbf{Algorithm} & \\textbf{RAM (B)} & \\textbf{Flash (KB)} & \\textbf{HS Frames} & \\textbf{HS (mJ)} & \\textbf{Total (mJ)} & \\textbf{Daily Life (Yrs)} \\\\
 \\hline
 """
     for k, v in sim.items():
         hs_str = f"{v['hs_total_packets']} ({v['hs_tx_packets']}/{v['hs_rx_packets']})" if v['hs_total_packets'] > 0 else "0"
-        latex_table += f"{k} & {v['stack_ram_bytes']} & {v['flash_bytes']/1024:.1f} & {hs_str} & {v['handshake_energy_mj']:.1f} & {v['total_energy_mj']:.1f} \\\\\n"
+        life_d = sim_daily_tbl[k]["battery_years"]
+        latex_table += f"{k} & {v['stack_ram_bytes']} & {v['flash_bytes']/1024:.1f} & {hs_str} & {v['handshake_energy_mj']:.1f} & {v['total_energy_mj']:.1f} & {life_d:.2f} \\\\\n"
     latex_table += """\\hline
 \\end{tabular}
 \\end{table}

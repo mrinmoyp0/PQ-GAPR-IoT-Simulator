@@ -42,19 +42,19 @@ BAT_TOTAL_JOULES = BAT_CAPACITY_MAH * 3.6 * BAT_VOLTAGE  # 2,430 Joules
 ALGORITHMS = {
     "Proposed: PQ-GAPR": {
         "desc": "Gateway-Assisted Key-Insulated Ratchet",
-        "handshake_cycles": 14_200,    # TRNG Gen + HKDF mix-in
-        "msg_cycles": 6_800,
-        "epoch_cycles": 12_400,
-        "handshake_tx_bytes": 32,      # E2E Encrypted TRNG Nonce (N_node) uplink
-        "handshake_rx_bytes": 48,      # Gateway KEM completion receipt
+        "handshake_cycles": 13_200,    # Session 1: Hardware TRNG draw + initial root derivation
+        "msg_cycles": 6_800,           # Per-message symmetric ratchet + AEAD encryption
+        "epoch_cycles": 13_200,        # Per-epoch: Hardware TRNG draw (N_node,E) + HKDF mixing
+        "handshake_tx_bytes": 32,      # Initial device setup / registration token
+        "handshake_rx_bytes": 48,      # Initial gateway setup receipt
         "msg_tx_overhead_bytes": 30,   # AEAD Tag + ESN + MsgID + Nonce
-        "epoch_rx_bytes": 48,          # Encrypted Quantum Seed (SS_fresh) downlink
+        "epoch_rx_bytes": 48,          # Delegated Quantum Seed (SS_fresh) downlink
         "stack_ram_bytes": 384,
         "flash_bytes": 5_820,
         "pq_sec": "128-bit Post-Quantum",
         "fs": "Yes",
-        "pcs": "Yes (Key-Insulated)",
-        "rekey_type": "epoch_injection" # E2E TRNG + delegated quantum entropy injection
+        "pcs": "Yes (Key-Insulated via Per-Epoch TRNG)",
+        "rekey_type": "epoch_injection" # Per-epoch TRNG draw + delegated quantum entropy injection
     },
     "Direct PQC: ML-KEM-512 (FIPS 203)": {
         "desc": "Direct NIST Category 1 Lattice KEM",

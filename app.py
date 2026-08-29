@@ -41,20 +41,20 @@ BAT_TOTAL_JOULES = BAT_CAPACITY_MAH * 3.6 * BAT_VOLTAGE  # 2,430 Joules
 # Cryptographic Primitive Benchmarks (pqm4 & NIST LWC verified)
 ALGORITHMS = {
     "Proposed: PQ-GAPR": {
-        "desc": "Gateway-Assisted Progressive Ratchet",
-        "handshake_cycles": 14_200,
+        "desc": "Gateway-Assisted Key-Insulated Ratchet",
+        "handshake_cycles": 14_200,    # TRNG Gen + HKDF mix-in
         "msg_cycles": 6_800,
         "epoch_cycles": 12_400,
-        "handshake_tx_bytes": 32,      # Ephemeral challenge uplink
-        "handshake_rx_bytes": 48,      # Gateway-bound ticket downlink
+        "handshake_tx_bytes": 32,      # E2E Encrypted TRNG Nonce (N_node) uplink
+        "handshake_rx_bytes": 48,      # Gateway KEM completion receipt
         "msg_tx_overhead_bytes": 30,   # AEAD Tag + ESN + MsgID + Nonce
-        "epoch_rx_bytes": 48,          # Encrypted Quantum Seed DeltaE (Relayed by GW)
+        "epoch_rx_bytes": 48,          # Encrypted Quantum Seed (SS_fresh) downlink
         "stack_ram_bytes": 384,
         "flash_bytes": 5_820,
         "pq_sec": "128-bit Post-Quantum",
         "fs": "Yes",
-        "pcs": "Yes (Self-Healing)",
-        "rekey_type": "epoch_injection" # Uses lightweight quantum epoch injection
+        "pcs": "Yes (Key-Insulated)",
+        "rekey_type": "epoch_injection" # E2E TRNG + delegated quantum entropy injection
     },
     "Direct PQC: ML-KEM-512 (FIPS 203)": {
         "desc": "Direct NIST Category 1 Lattice KEM",

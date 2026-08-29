@@ -164,14 +164,32 @@ with st.sidebar:
         format_func=lambda x: f"Every {x}s ({x/60:.0f}m)" if x < 3600 else (f"Every {x/3600:.0f}h" if x < 86400 else "Every 24h")
     )
     
-    # Airtime & Duty Cycle Legality Notice
-    est_airtime_s = ((payload_size + 30 + (int(np.ceil((payload_size + 30) / USABLE_MTU)) * NET_HEADER_BYTES)) * NET_AIRTIME_MS_PER_BYTE) / 1000.0
-    dc_pct = (est_airtime_s / reporting_interval_s) * 100.0
+    # Airtime & Duty Cycle Legality Notice (Per-Algorithm Evaluation)
+    dc_dict = {}
+    for a_name, a_info in ALGORITHMS.items():
+        ovh = a_info["msg_tx_overhead_bytes"]
+        pkts = int(np.ceil((payload_size + ovh) / USABLE_MTU))
+        tot_b = (pkts * NET_HEADER_BYTES) + (payload_size + ovh)
+        air_s = (tot_b * NET_AIRTIME_MS_PER_BYTE) / 1000.0
+        dc_val = (air_s / reporting_interval_s) * 100.0
+        dc_dict[a_name] = (dc_val, air_s)
+        
+    max_algo = max(dc_dict.keys(), key=lambda k: dc_dict[k][0])
+    max_dc, max_air = dc_dict[max_algo]
+    gapr_dc, gapr_air = dc_dict["Proposed: PQ-GAPR"]
     
-    if dc_pct > 1.0:
-        st.warning(fr"⚠️ **Duty Cycle ({dc_pct:.2f}%)** exceeds EU868 1% Sub-band limit at SF12! Recommended: $\ge 300$s.")
+    if max_dc > 1.0 and gapr_dc <= 1.0:
+        st.warning(
+            fr"⚠️ **EU868 1% Duty-Cycle Alert:** While **PQ-GAPR ({gapr_dc:.2f}%)** complies with regulations, "
+            fr"**{max_algo} ({max_dc:.2f}%)** exceeds the legal 1% sub-band limit at SF12 due to its larger {ALGORITHMS[max_algo]['msg_tx_overhead_bytes']}B frame overhead."
+        )
+    elif max_dc > 1.0 and gapr_dc > 1.0:
+        st.error(
+            fr"⚠️ **EU868 1% Sub-Band Violation:** Interval of {reporting_interval_s}s is too fast for SF12 airtime. "
+            fr"PQ-GAPR runs at {gapr_dc:.2f}%, and {max_algo} runs at {max_dc:.2f}%. Recommended interval: $\ge 600$s."
+        )
     else:
-        st.success(f"✅ **Duty Cycle ({dc_pct:.2f}%)** complies with EU868 1% regulation.")
+        st.success(f"✅ **All algorithms comply with EU868 1% limit** (Worst case: {max_algo} at {max_dc:.2f}%).")
         
     st.markdown("---")
     st.markdown("""

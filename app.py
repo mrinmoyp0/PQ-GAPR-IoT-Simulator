@@ -89,20 +89,20 @@ ALGORITHMS = {
         "rekey_type": "full_handshake"
     },
     "Hybrid PQC: Signal SPQR": {
-        "desc": "Dual ECDH + ML-KEM on MCU",
+        "desc": "Dual ECDH + Chunked ML-KEM Ratchet on MCU",
         "handshake_cycles": 1_850_000,
-        "msg_cycles": 12_500,
+        "msg_cycles": 12_500,          # Continuous dual-ratchet HKDF step + local chunk processing
         "epoch_cycles": 0,
-        "handshake_tx_bytes": 832,     # 800B KEM + 32B X25519 uplink
-        "handshake_rx_bytes": 800,     # 800B KEM downlink
-        "msg_tx_overhead_bytes": 76,
+        "handshake_tx_bytes": 832,     # Initial setup prekey exchange
+        "handshake_rx_bytes": 800,     # Initial setup peer KEM
+        "msg_tx_overhead_bytes": 76,   # Telemetry + 48B ML-KEM slice + erasure header (Chunked Ratchet)
         "epoch_rx_bytes": 0,
-        "stack_ram_bytes": 5_800,
+        "stack_ram_bytes": 5_800,      # Chunk reassembly buffer + ML-KEM workspace + ECC state
         "flash_bytes": 38_400,
         "pq_sec": "128-bit Post-Quantum",
         "fs": "Yes",
         "pcs": "Yes",
-        "rekey_type": "full_handshake" # Full periodic ratchet re-key
+        "rekey_type": "full_handshake" # Full periodic ratchet re-key once chunk window completes
     },
     "Classical: ECDHE (secp256r1)": {
         "desc": "Legacy Pre-Quantum Baseline",

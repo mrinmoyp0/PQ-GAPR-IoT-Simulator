@@ -186,7 +186,11 @@ with st.sidebar:
     elif max_dc > 1.0 and gapr_dc > 1.0:
         st.error(
             fr"⚠️ **EU868 1% Sub-Band Violation:** Interval of {reporting_interval_s}s is too fast for SF12 airtime. "
-            fr"PQ-GAPR runs at {gapr_dc:.2f}%, and {max_algo} runs at {max_dc:.2f}%. Recommended interval: $\ge 600$s."
+            fr"PQ-GAPR runs at {gapr_dc:.2f}%, and {max_algo} runs at {max_dc:.2f}%. Recommended interval: $\ge 600$s or enable LoRaWAN ADR."
+        )
+    elif gapr_dc >= 0.90:
+        st.info(
+            fr"ℹ️ **Narrow Duty-Cycle Margin ({gapr_dc:.2f}%):** At {reporting_interval_s}s on SF12, PQ-GAPR operates close to the 1.0% limit (<0.05% headroom). For production deployments with rapid cadences, enable LoRaWAN Adaptive Data Rate (ADR) to drop SF."
         )
     else:
         st.success(f"✅ **All algorithms comply with EU868 1% limit** (Worst case: {max_algo} at {max_dc:.2f}%).")
@@ -360,6 +364,7 @@ def calculate_simulation(payload_b, n_sess, epoch_n, interval_s):
             "hs_tx_packets": hs_tx_pkts,
             "hs_rx_packets": hs_rx_pkts,
             "hs_total_packets": hs_total_frames,
+            "epoch_packets": epoch_rx_pkts if is_gapr else (hs_total_frames if algo["rekey_type"] == "full_handshake" else 0),
             "msg_packets": msg_pkts,
             "battery_years": bat_lifetime_years,
             "pq_sec": algo["pq_sec"],
@@ -547,8 +552,8 @@ for k, v in sim.items():
         "PCS": v["pcs"],
         "Stack RAM": f"{v['stack_ram_bytes']:,} B",
         "Flash ROM": f"{v['flash_bytes'] / 1024:.1f} KB",
-        "HS Frames (TX↑/RX↓)": f"{v['hs_total_packets']} ({v['hs_tx_packets']}↑ / {v['hs_rx_packets']}↓)" if v['hs_total_packets'] > 0 else "0",
-        "HS Energy": f"{v['handshake_energy_mj']:,.1f} mJ" if v['handshake_energy_mj'] > 0 else "0 mJ",
+        "Setup HS (TX↑/RX↓)": f"{v['hs_total_packets']} ({v['hs_tx_packets']}↑ / {v['hs_rx_packets']}↓)" if v['hs_total_packets'] > 0 else "0",
+        "Epoch Refresh": f"{v['epoch_packets']} frames" if v['epoch_packets'] > 0 else "0",
         "Total Energy (mJ)": f"{v['total_energy_mj']:,.1f} mJ",
         "Battery (24h Daily)": f"{life_daily:.2f} Years ({life_daily*365.25:.0f} d)",
         "Battery (1h Metering)": f"{life_hourly*365.25:.0f} Days"
@@ -642,15 +647,16 @@ with col_d2:
 \\centering
 \\caption{Performance Evaluation on ARM Cortex-M4 over LoRaWAN DR0 (SF12 / 51B MTU)}
 \\label{tab:pqc_cortex_m4}
-\\begin{tabular}{lcccccc}
+\\begin{tabular}{lccccccc}
 \\hline
-\\textbf{Algorithm} & \\textbf{RAM (B)} & \\textbf{Flash (KB)} & \\textbf{HS Frames} & \\textbf{HS (mJ)} & \\textbf{Total (mJ)} & \\textbf{Daily Life (Yrs)} \\\\
+\\textbf{Algorithm} & \\textbf{RAM (B)} & \\textbf{Flash (KB)} & \\textbf{Setup HS} & \\textbf{Epoch Refresh} & \\textbf{Total (mJ)} & \\textbf{Daily Life (Yrs)} \\\\
 \\hline
 """
     for k, v in sim.items():
         hs_str = f"{v['hs_total_packets']} ({v['hs_tx_packets']}/{v['hs_rx_packets']})" if v['hs_total_packets'] > 0 else "0"
+        epoch_str = f"{v['epoch_packets']}" if v['epoch_packets'] > 0 else "0"
         life_d = sim_daily_tbl[k]["battery_years"]
-        latex_table += f"{k} & {v['stack_ram_bytes']} & {v['flash_bytes']/1024:.1f} & {hs_str} & {v['handshake_energy_mj']:.1f} & {v['total_energy_mj']:.1f} & {life_d:.2f} \\\\\n"
+        latex_table += f"{k} & {v['stack_ram_bytes']} & {v['flash_bytes']/1024:.1f} & {hs_str} & {epoch_str} & {v['total_energy_mj']:.1f} & {life_d:.2f} \\\\\n"
     latex_table += """\\hline
 \\end{tabular}
 \\end{table}
